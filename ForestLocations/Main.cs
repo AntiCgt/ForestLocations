@@ -1,8 +1,10 @@
-﻿using BepInEx;
+using BepInEx;
 using HarmonyLib;
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace ForestLocations
 {
@@ -15,6 +17,7 @@ namespace ForestLocations
             public string Text;
         }
         private List<GameObject> textObjects = new List<GameObject>();
+        private bool markersCreated = false;
 
         private LocationMarker[] locations = new LocationMarker[]
         {
@@ -49,6 +52,28 @@ namespace ForestLocations
 
         void Start()
         {
+            // Запускаем корутину для ожидания инициализации
+            StartCoroutine(InitializeAfterDelay());
+        }
+
+        IEnumerator InitializeAfterDelay()
+        {
+            // Ждем пока игра полностью загрузится
+            yield return new WaitForSeconds(2f);
+
+            // Ждем пока VRRig станет доступен
+            while (VRRig.LocalRig == null)
+            {
+                yield return new WaitForSeconds(0.5f);
+            }
+
+            // Создаем маркеры
+            CreateMarkers();
+            markersCreated = true;
+        }
+
+        void CreateMarkers()
+        {
             for (int i = 0; i < locations.Length; i++)
             {
                 GameObject tmp = CreateMarker(locations[i]);
@@ -61,23 +86,43 @@ namespace ForestLocations
             GameObject go = new GameObject($"Marker_{marker.Text}");
             go.transform.position = marker.Position;
 
-            TextMeshPro tmp = go.AddComponent<TextMeshPro>();
+            // Добавляем Canvas для лучшего рендеринга
+            Canvas canvas = go.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = Camera.main;
+
+            // Создаем дочерний объект для текста
+            GameObject textObj = new GameObject("Text");
+            textObj.transform.SetParent(go.transform);
+            textObj.transform.localPosition = Vector3.zero;
+            textObj.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
+
+            TextMeshProUGUI tmp = textObj.AddComponent<TextMeshProUGUI>();
             tmp.text = marker.Text;
-            tmp.fontSize = 15f;
-            tmp.color = new Color(1f,1f,1f,0.3f);
+            tmp.fontSize = 24f;
+            tmp.color = new Color(1f, 1f, 1f, 0.3f);
             tmp.alignment = TextAlignmentOptions.Center;
+
+            // Добавляем обводку для лучшей видимости
+            tmp.fontMaterial.EnableKeyword("OUTLINE_ON");
+            tmp.outlineWidth = 0.15f;
+            tmp.outlineColor = Color.black;
 
             return go;
         }
 
         void Update()
         {
+            if (!markersCreated || VRRig.LocalRig == null)
+                return;
+
             Vector3 playerPosition = VRRig.LocalRig.transform.position;
 
             foreach (GameObject text in textObjects)
             {
                 if (text != null)
                 {
+                    // Поворачиваем текст к игроку
                     text.transform.LookAt(playerPosition);
                     text.transform.Rotate(0, 180, 0);
                 }
